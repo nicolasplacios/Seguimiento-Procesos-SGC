@@ -1,0 +1,2710 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BPA · Árbol de Procesos ULima</title>
+<style>
+  /* ============ RESET + BASE ============ */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    background: #F0F0F0;
+    color: #1A1A1A;
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, select, textarea { font-family: inherit; font-size: inherit; }
+
+  /* ============ LAYOUT ============ */
+  .app {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    grid-template-columns: 1fr 0;
+    height: 100vh;
+    width: 100vw;
+    transition: grid-template-columns 0.25s ease;
+  }
+  .app.panel-open { grid-template-columns: 1fr 480px; }
+  .app > .header, .app > .toolbar { grid-column: 1 / -1; }
+  .app > .canvas { grid-column: 1; grid-row: 3; }
+  .app > .side-panel { grid-column: 2; grid-row: 3; }
+
+  /* Side panel */
+  .side-panel {
+    background: #fff;
+    border-left: 1px solid #D0D0D0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .sp-head {
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid #EEE;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .sp-head-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .sp-eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: #888;
+  }
+  .sp-title {
+    font-size: 15px; font-weight: 600; line-height: 1.3;
+    letter-spacing: -0.1px; word-break: break-word;
+  }
+  .sp-code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px; color: #888; margin-top: 2px;
+  }
+  .sp-close {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: #888; font-size: 16px; background: none; border: none;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .sp-close:hover { color: #1A1A1A; background: #F0F0F0; }
+  .sp-body { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 18px; }
+  .sp-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sp-meta .status-pill { cursor: default; }
+  .sp-section-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: #888;
+  }
+  .sp-path-box {
+    background: #F5F5F5;
+    border: 1px solid #E0E0E0;
+    padding: 10px 12px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    color: #1A1A1A;
+    word-break: break-all;
+    line-height: 1.5;
+    min-height: 40px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .sp-path-box.empty { color: #AAA; font-family: inherit; font-size: 12.5px; font-style: italic; }
+  .sp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sp-btn {
+    padding: 9px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    border: 1px solid #D0D0D0;
+    background: #fff;
+    color: #1A1A1A;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.12s;
+  }
+  .sp-btn:hover { background: #F5F5F5; border-color: #888; }
+  .sp-btn.primary {
+    background: #E8450A; border-color: #E8450A; color: #fff;
+  }
+  .sp-btn.primary:hover { background: #FF5519; border-color: #FF5519; }
+  .sp-btn svg { width: 13px; height: 13px; }
+  .sp-viewer {
+    flex: 1;
+    min-height: 200px;
+    border: 1px solid #E0E0E0;
+    background: #FAFAFA;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sp-viewer iframe { width: 100%; height: 100%; border: none; flex: 1; }
+  .sp-empty-viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 20px;
+    color: #888;
+    text-align: center;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+  .sp-empty-viewer strong { color: #1A1A1A; font-size: 13px; }
+  .sp-hint {
+    font-size: 11.5px; color: #666; line-height: 1.5;
+    background: #FFF8E6;
+    border-left: 3px solid #FFC107;
+    padding: 8px 10px;
+  }
+  .sp-edit-row {
+    display: flex; gap: 6px; align-items: stretch;
+  }
+  .sp-edit-row input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #D0D0D0;
+    font-size: 12px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    background: #FAFAFA;
+  }
+  .sp-edit-row input:focus { outline: none; border-color: #E8450A; background: #fff; }
+
+  /* ============ HEADER ============ */
+  .header {
+    background: #1A1A1A;
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    border-bottom: 1px solid #000;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .brand-mark {
+    width: 34px; height: 34px;
+    background: #E8450A;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px;
+    letter-spacing: 0.5px;
+  }
+  .brand-titles { display: flex; flex-direction: column; line-height: 1.15; }
+  .brand-title { font-size: 14px; font-weight: 600; letter-spacing: 0.2px; }
+  .brand-sub { font-size: 11px; color: #AAA; letter-spacing: 0.8px; text-transform: uppercase; }
+
+  .stats { display: flex; gap: 22px; align-items: center; }
+  .stat {
+    display: flex; flex-direction: column; line-height: 1.1; min-width: 64px;
+  }
+  .stat-val { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .stat-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
+  .stat-val.accent-oficial { color: #8CC58C; }
+  .stat-val.accent-desarrollado { color: #F56A4A; }
+  .stat-val.accent-desactualizado { color: #999; }
+
+  .header-actions { display: flex; gap: 8px; }
+  .btn {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.04);
+    color: #fff;
+    letter-spacing: 0.2px;
+    transition: background 0.15s, border-color 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.35); }
+  .btn-primary {
+    background: #E8450A;
+    border-color: #E8450A;
+  }
+  .btn-primary:hover { background: #FF5519; border-color: #FF5519; }
+  .btn-ghost-dark {
+    background: transparent;
+    border: 1px solid #D0D0D0;
+    color: #1A1A1A;
+  }
+  .btn-ghost-dark:hover { background: #fff; border-color: #888; }
+  .btn-danger {
+    background: #D32F2F;
+    border-color: #D32F2F;
+    color: #fff;
+  }
+  .btn-danger:hover { background: #B02020; border-color: #B02020; }
+
+  /* ============ TOOLBAR ============ */
+  .toolbar {
+    background: #fff;
+    border-bottom: 1px solid #E0E0E0;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 420px;
+    min-width: 220px;
+  }
+  .search-wrap::before {
+    content: "";
+    position: absolute;
+    left: 12px; top: 50%;
+    width: 14px; height: 14px;
+    transform: translateY(-50%);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg>");
+    background-size: contain;
+    background-repeat: no-repeat;
+    opacity: 0.8;
+    pointer-events: none;
+  }
+  .search-input {
+    width: 100%;
+    padding: 8px 12px 8px 34px;
+    border: 1px solid #D0D0D0;
+    background: #FAFAFA;
+    font-size: 13px;
+    color: #1A1A1A;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .search-input:focus { outline: none; border-color: #E8450A; background: #fff; }
+
+  .filter-group {
+    display: flex; gap: 4px; align-items: center;
+    border: 1px solid #D0D0D0;
+    padding: 2px;
+    background: #FAFAFA;
+  }
+  .filter-chip {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #555;
+    letter-spacing: 0.2px;
+    transition: background 0.12s, color 0.12s;
+    white-space: nowrap;
+  }
+  .filter-chip:hover { color: #1A1A1A; background: #fff; }
+  .filter-chip.active { background: #1A1A1A; color: #fff; }
+
+  .toolbar-spacer { flex: 1; }
+  .toolbar-info { color: #666; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .save-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #8CC58C;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .save-dot.saving { background: #E8450A; }
+  @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+  .toolbar-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid #D0D0D0;
+    background: #fff;
+    color: #1A1A1A;
+    transition: all 0.12s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .toolbar-btn:hover { background: #F0F0F0; border-color: #888; }
+  .toolbar-btn svg { width: 13px; height: 13px; }
+
+  /* ============ CANVAS ============ */
+  .canvas {
+    position: relative;
+    overflow: auto;
+    background:
+      linear-gradient(#F0F0F0, #F0F0F0),
+      radial-gradient(circle, #DADADA 1px, transparent 1px);
+    background-size: auto, 20px 20px;
+    background-blend-mode: multiply;
+  }
+  .canvas-inner {
+    position: relative;
+    min-width: 100%;
+    min-height: 100%;
+    padding: 32px 48px 80px 32px;
+  }
+
+  /* ============ TREE ============ */
+  .tree { list-style: none; padding: 0; margin: 0; }
+  .tree ul { list-style: none; padding: 0; margin: 0; }
+
+  /* Horizontal tree rows */
+  .node-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    position: relative;
+  }
+  .node-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .children-wrap {
+    padding-left: 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+  }
+  /* vertical connector line from parent to children column */
+  .children-wrap::before {
+    content: "";
+    position: absolute;
+    left: 18px;
+    top: -6px;
+    bottom: 6px;
+    width: 1px;
+    background: #BFBFBF;
+  }
+  /* horizontal connector from vertical line to each child */
+  .node-row > .connector {
+    width: 18px;
+    height: 1px;
+    background: #BFBFBF;
+    margin-top: 22px;
+    flex-shrink: 0;
+  }
+  /* top-level nodes: no connector */
+  .tree > .node-row > .connector { display: none; }
+
+  .node {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    min-height: 44px;
+    margin: 4px 0;
+    user-select: none;
+    transition: transform 0.12s ease, box-shadow 0.15s;
+  }
+  .node.dragging { opacity: 0.4; }
+  .node.drag-over > .node-body { outline: 2px dashed #E8450A; outline-offset: 2px; }
+  .node.drag-before > .node-body { box-shadow: 0 -3px 0 0 #E8450A; }
+  .node.drag-after > .node-body { box-shadow: 0 3px 0 0 #E8450A; }
+  @keyframes flashMove {
+    0%   { box-shadow: 0 0 0 0 rgba(232, 69, 10, 0.55); }
+    50%  { box-shadow: 0 0 0 8px rgba(232, 69, 10, 0.18); }
+    100% { box-shadow: 0 0 0 0 rgba(232, 69, 10, 0); }
+  }
+  .node.flash-move > .node-body { animation: flashMove 0.6s ease-out; }
+
+  .node-toggle {
+    width: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 10px;
+    flex-shrink: 0;
+    transition: color 0.12s, transform 0.2s;
+  }
+  .node-toggle:hover { color: #1A1A1A; }
+  .node-toggle.collapsed { transform: rotate(-90deg); }
+  .node-toggle.empty { visibility: hidden; }
+
+  .node-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 10px;
+    min-width: 240px;
+    max-width: 440px;
+    cursor: grab;
+    transition: box-shadow 0.15s, transform 0.12s;
+    border-radius: 1px;
+  }
+  .node-body:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+  .node-body:active { cursor: grabbing; }
+
+  .node-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .node-title {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .node-code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.3px;
+    opacity: 0.7;
+    line-height: 1.2;
+  }
+  .node.hide-codes .node-code { display: none; }
+
+  .node-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.12s;
+    flex-shrink: 0;
+  }
+  .node-body:hover .node-actions { opacity: 1; }
+  .node-action {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 2px;
+    transition: background 0.12s;
+  }
+  .node-action:hover { background: rgba(0,0,0,0.12); }
+  .node-action svg { width: 13px; height: 13px; stroke-width: 2; }
+  .node-action.light svg { stroke: currentColor; }
+
+  .node-count {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.18);
+    margin-left: 4px;
+    flex-shrink: 0;
+  }
+
+  /* Node type color variants */
+  .node[data-type="tipo"] > .node-body {
+    background: #1A1A1A;
+    color: #fff;
+  }
+  .node[data-type="proceso"] > .node-body {
+    background: #E8450A;
+    color: #fff;
+  }
+  .node[data-type="subproceso"] > .node-body {
+    background: #3A3A3A;
+    color: #fff;
+  }
+  .node[data-type="documento"] > .node-body {
+    background: #F5F5F5;
+    color: #1A1A1A;
+    border: 1px solid #D0D0D0;
+  }
+  .node[data-type="documento"][data-status="DESARROLLADO"] > .node-body {
+    background: #D32F2F;
+    color: #fff;
+    border-color: #D32F2F;
+  }
+  .node[data-type="documento"][data-status="DESACTUALIZADO"] > .node-body {
+    background: #ECECEC;
+    color: #777;
+    border: 1px dashed #B0B0B0;
+    opacity: 0.85;
+  }
+  .node[data-type="documento"][data-status="OFICIAL"] > .node-body {
+    background: #E4F2E4;
+    color: #1E5E1E;
+    border: 1px solid #8CC58C;
+  }
+  .node[data-type="instructivo"] > .node-body {
+    background: #FFF4EE;
+    color: #8A2A05;
+    border: 1px solid #F4C9B2;
+    min-width: 220px;
+  }
+  .node[data-type="formato"] > .node-body {
+    background: #E8F0FE;
+    color: #1A3A7A;
+    border: 1px solid #B8CCF0;
+    min-width: 220px;
+  }
+  .node[data-type="formato"][data-status="DESARROLLADO"] > .node-body {
+    background: #D32F2F; color: #fff; border-color: #D32F2F;
+  }
+  .node[data-type="formato"][data-status="DESACTUALIZADO"] > .node-body {
+    background: #ECECEC; color: #777; border: 1px dashed #B0B0B0;
+  }
+
+  /* Documento count badge variants for readability */
+  .node[data-type="documento"] .node-count,
+  .node[data-type="instructivo"] .node-count,
+  .node[data-type="formato"] .node-count {
+    background: rgba(0,0,0,0.08);
+  }
+  .node[data-type="documento"][data-status="DESARROLLADO"] .node-count {
+    background: rgba(255,255,255,0.25);
+  }
+
+  /* Status pill on documents */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    border-radius: 2px;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: filter 0.12s;
+  }
+  .status-pill:hover { filter: brightness(0.92); }
+  .status-pill[data-status="OFICIAL"] { background: #2E7D2E; color: #fff; }
+  .status-pill[data-status="DESARROLLADO"] { background: #fff; color: #D32F2F; }
+  .status-pill[data-status="DESACTUALIZADO"] { background: #999; color: #fff; text-decoration: line-through; text-decoration-thickness: 1px; }
+
+  /* Warning badge for ambiguous subprocess */
+  .warn-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    background: #FFC107;
+    color: #1A1A1A;
+    border-radius: 2px;
+    margin-top: 4px;
+    align-self: flex-start;
+  }
+  .warn-badge svg { width: 10px; height: 10px; }
+
+  /* Add-child dropdown */
+  .add-menu {
+    position: absolute;
+    background: #fff;
+    border: 1px solid #D0D0D0;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    min-width: 180px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+  }
+  .add-menu-item {
+    padding: 9px 14px;
+    font-size: 12.5px;
+    color: #1A1A1A;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.1s;
+  }
+  .add-menu-item:hover { background: #F5F5F5; }
+  .add-menu-item .sw {
+    width: 10px; height: 10px; border-radius: 1px; flex-shrink: 0;
+  }
+  .add-menu-divider { height: 1px; background: #EEE; margin: 4px 0; }
+
+  /* ============ MODAL ============ */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(10,10,10,0.55);
+    backdrop-filter: blur(2px);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.15s ease;
+  }
+  .modal-backdrop.open { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: #fff;
+    width: 520px;
+    max-width: calc(100vw - 48px);
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    animation: slideUp 0.18s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-head {
+    padding: 18px 22px;
+    border-bottom: 1px solid #EEE;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .modal-head-main { display: flex; flex-direction: column; gap: 3px; }
+  .modal-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #888; }
+  .modal-title { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+  .modal-close {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: #888;
+    font-size: 16px;
+    transition: color 0.12s, background 0.12s;
+    border-radius: 2px;
+  }
+  .modal-close:hover { color: #1A1A1A; background: #F0F0F0; }
+  .modal-body {
+    padding: 20px 22px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .form-field { display: flex; flex-direction: column; gap: 6px; }
+  .form-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: #666;
+  }
+  .form-input, .form-select, .form-textarea {
+    padding: 9px 12px;
+    border: 1px solid #D0D0D0;
+    background: #FAFAFA;
+    font-size: 13px;
+    color: #1A1A1A;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus {
+    outline: none; border-color: #E8450A; background: #fff;
+  }
+  .form-textarea { resize: vertical; min-height: 70px; }
+
+  .status-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .status-opt {
+    padding: 10px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    border: 2px solid transparent;
+    background: #F5F5F5;
+    color: #555;
+    text-align: center;
+    transition: all 0.12s;
+  }
+  .status-opt:hover { background: #EEE; }
+  .status-opt.sel[data-status="OFICIAL"] { background: #2E7D2E; color: #fff; border-color: #2E7D2E; }
+  .status-opt.sel[data-status="DESARROLLADO"] { background: #D32F2F; color: #fff; border-color: #D32F2F; }
+  .status-opt.sel[data-status="DESACTUALIZADO"] { background: #888; color: #fff; border-color: #888; }
+
+  .modal-foot {
+    padding: 14px 22px;
+    border-top: 1px solid #EEE;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .modal-foot-group { display: flex; gap: 8px; }
+
+  /* Confirm dialog */
+  .confirm .modal { width: 400px; }
+  .confirm-msg { color: #444; font-size: 13.5px; line-height: 1.5; }
+  .confirm-target {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: #F5F5F5;
+    border-left: 3px solid #D32F2F;
+    font-size: 12.5px;
+    color: #1A1A1A;
+    font-weight: 500;
+  }
+
+  /* ============ TOAST ============ */
+  .toast-stack {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 2000;
+    pointer-events: none;
+  }
+  .toast {
+    background: #1A1A1A;
+    color: #fff;
+    padding: 10px 16px;
+    font-size: 12.5px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    display: flex; align-items: center; gap: 10px;
+    animation: toastIn 0.2s ease;
+    pointer-events: auto;
+  }
+  @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .toast.success { border-left: 3px solid #8CC58C; }
+  .toast.error { border-left: 3px solid #D32F2F; }
+  .toast.info { border-left: 3px solid #E8450A; }
+
+  /* ============ LAYOUT VARIANTS ============ */
+  /* Vertical indented (file-explorer-like) */
+  body.layout-indented .children-wrap { padding-left: 22px; }
+  body.layout-indented .node-body { min-width: 280px; max-width: 520px; }
+  body.layout-indented .node-row > .connector { width: 10px; }
+  body.layout-indented .children-wrap::before { left: 11px; }
+
+  /* Compact */
+  body.density-compact .node-body { padding: 5px 10px; min-height: 34px; }
+  body.density-compact .node-title { font-size: 12px; }
+  body.density-compact .node-code { font-size: 10px; }
+  body.density-compact .children-wrap { gap: 4px; }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: #888;
+    gap: 12px;
+    text-align: center;
+  }
+  .empty-state strong { color: #1A1A1A; }
+
+  /* Drop zone indicators on children-wrap */
+  .children-wrap.drop-zone-active { background: rgba(232,69,10,0.05); border: 1px dashed #E8450A; }
+
+  /* Legend */
+  .legend {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    background: #fff;
+    border: 1px solid #D0D0D0;
+    padding: 10px 14px;
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: #555;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    z-index: 50;
+    flex-wrap: wrap;
+    max-width: 400px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-sw { width: 12px; height: 12px; border-radius: 1px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.08); }
+
+  /* Scrollbars */
+  .canvas::-webkit-scrollbar { width: 12px; height: 12px; }
+  .canvas::-webkit-scrollbar-track { background: #E5E5E5; }
+  .canvas::-webkit-scrollbar-thumb { background: #B0B0B0; border: 2px solid #E5E5E5; }
+  .canvas::-webkit-scrollbar-thumb:hover { background: #888; }
+  .canvas::-webkit-scrollbar-corner { background: #E5E5E5; }
+
+  /* Hide codes tweak */
+  body.hide-codes .node-code { display: none; }
+</style>
+</head>
+<body>
+
+<template id="__bundler_thumbnail" data-bg-color="#E8450A">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#E8450A"/>
+    <g transform="translate(180 220)" fill="none" stroke="#fff" stroke-width="6">
+      <rect x="0" y="120" width="180" height="80" rx="6" fill="#fff"/>
+      <rect x="340" y="40" width="180" height="80" rx="6" fill="#fff"/>
+      <rect x="340" y="200" width="180" height="80" rx="6" fill="#fff"/>
+      <rect x="680" y="0" width="160" height="60" rx="6" fill="#fff"/>
+      <rect x="680" y="90" width="160" height="60" rx="6" fill="#fff"/>
+      <rect x="680" y="220" width="160" height="60" rx="6" fill="#fff"/>
+      <rect x="680" y="310" width="160" height="60" rx="6" fill="#fff"/>
+      <path d="M180 160 L340 80 M180 160 L340 240 M520 80 L680 30 M520 80 L680 120 M520 240 L680 250 M520 240 L680 340"/>
+    </g>
+    <text x="600" y="620" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-weight="800" font-size="64" letter-spacing="2">Árbol BPA</text>
+    <text x="600" y="680" text-anchor="middle" fill="#FFC9A8" font-family="system-ui,sans-serif" font-weight="500" font-size="28" letter-spacing="4">UNIVERSIDAD DE LIMA</text>
+  </svg>
+</template>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-mark">UL</div>
+      <div class="brand-titles">
+        <div class="brand-title">DPA · Árbol de Procesos</div>
+        <div class="brand-sub">Universidad de Lima · Sistema de Gesión de Calidad</div>
+      </div>
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat"><div class="stat-val" id="st-total">0</div><div class="stat-label">Documentos</div></div>
+      <div class="stat"><div class="stat-val accent-oficial" id="st-oficial">0</div><div class="stat-label">Oficiales</div></div>
+      <div class="stat"><div class="stat-val accent-desarrollado" id="st-desarrollado">0</div><div class="stat-label">Desarrollados</div></div>
+      <div class="stat"><div class="stat-val accent-desactualizado" id="st-desactualizado">0</div><div class="stat-label">Desactualizados</div></div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn" id="btn-import">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar JSON
+      </button>
+      <button class="btn btn-primary" id="btn-export">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar JSON
+      </button>
+    </div>
+  </header>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <input type="text" class="search-input" id="search" placeholder="Buscar por nombre o código..." />
+    </div>
+
+    <div class="filter-group" id="filter-group">
+      <button class="filter-chip active" data-status="">Todos</button>
+      <button class="filter-chip" data-status="OFICIAL">Oficial</button>
+      <button class="filter-chip" data-status="DESARROLLADO">Desarrollado</button>
+      <button class="filter-chip" data-status="DESACTUALIZADO">Desactualizado</button>
+    </div>
+
+    <div class="toolbar-spacer"></div>
+
+    <div class="toolbar-info">
+      <span class="save-dot" id="save-dot"></span>
+      <span id="save-text">Guardado</span>
+    </div>
+
+    <button class="toolbar-btn" id="btn-expand-all" title="Expandir todo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      Expandir
+    </button>
+    <button class="toolbar-btn" id="btn-collapse-all" title="Colapsar todo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 10 10 10 10 4"/><polyline points="20 14 14 14 14 20"/><line x1="14" y1="14" x2="21" y2="21"/><line x1="3" y1="3" x2="10" y2="10"/></svg>
+      Colapsar
+    </button>
+    <button class="toolbar-btn" id="btn-bulk-link" title="Vincular documentos en lote">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      Vincular en lote
+    </button>
+    <button class="toolbar-btn" id="btn-reset" title="Restaurar datos iniciales">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      Restaurar
+    </button>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas" id="canvas">
+    <div class="canvas-inner">
+      <ul class="tree" id="tree"></ul>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <aside class="side-panel" id="side-panel">
+    <div class="sp-head">
+      <div class="sp-head-main">
+        <div class="sp-eyebrow" id="sp-eyebrow">Documento</div>
+        <div class="sp-title" id="sp-title">—</div>
+        <div class="sp-code" id="sp-code"></div>
+      </div>
+      <button class="sp-close" id="sp-close" title="Cerrar panel">✕</button>
+    </div>
+    <div class="sp-body">
+      <div class="sp-meta" id="sp-meta"></div>
+
+      <div>
+        <div class="sp-section-title" style="margin-bottom:8px">Ruta del archivo</div>
+        <div class="sp-edit-row">
+          <input type="text" id="sp-path-input" placeholder="C:\Users\... o \\servidor\... o https://..." />
+          <button class="sp-btn" id="sp-path-save" title="Guardar ruta">Guardar</button>
+        </div>
+        <div class="sp-hint" id="sp-hint" style="margin-top:8px;display:none"></div>
+      </div>
+
+      <div>
+        <div class="sp-section-title" style="margin-bottom:8px">Acciones</div>
+        <div class="sp-actions">
+          <button class="sp-btn primary" id="sp-open">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Abrir
+          </button>
+          <button class="sp-btn" id="sp-download">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Descargar
+          </button>
+          <button class="sp-btn" id="sp-copy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copiar ruta
+          </button>
+        </div>
+      </div>
+
+      <div class="sp-viewer" id="sp-viewer">
+        <div class="sp-empty-viewer" id="sp-empty">
+          <strong>Sin vista previa</strong>
+          <div>Agrega una ruta para abrir el documento.<br/>Las URLs web (http/https) se previsualizan aquí; las rutas locales se abren en Word.</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-sw" style="background:#1A1A1A"></div>Tipo</div>
+  <div class="legend-item"><div class="legend-sw" style="background:#E8450A"></div>Proceso</div>
+  <div class="legend-item"><div class="legend-sw" style="background:#3A3A3A"></div>Subproceso</div>
+  <div class="legend-item"><div class="legend-sw" style="background:#E4F2E4;border-color:#8CC58C"></div>Oficial</div>
+  <div class="legend-item"><div class="legend-sw" style="background:#D32F2F"></div>Desarrollado</div>
+  <div class="legend-item"><div class="legend-sw" style="background:#ECECEC"></div>Desactualizado</div>
+  <div class="legend-item"><div class="legend-sw" style="background:#FFF4EE;border-color:#F4C9B2"></div>Instructivo</div>
+  <div class="legend-item"><div class="legend-sw" style="background:#E8F0FE;border-color:#B8CCF0"></div>Formato</div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-head-main">
+        <div class="modal-eyebrow" id="em-eyebrow">Editar nodo</div>
+        <div class="modal-title" id="em-title">—</div>
+      </div>
+      <button class="modal-close" data-close>✕</button>
+    </div>
+    <div class="modal-body" id="em-body">
+      <div class="form-field">
+        <label class="form-label">Nombre</label>
+        <textarea class="form-textarea" id="em-name" rows="2"></textarea>
+      </div>
+      <div class="form-field" id="em-code-field">
+        <label class="form-label">Código</label>
+        <input type="text" class="form-input" id="em-code" placeholder="p. ej. FA-01-EEGG/FAC-P-01" />
+      </div>
+      <div class="form-field" id="em-path-field">
+        <label class="form-label">Ruta del archivo / URL</label>
+        <input type="text" class="form-input" id="em-path" placeholder="p. ej. C:\Users\... o \\servidor\... o https://..." />
+        <div style="font-size:11px;color:#888;margin-top:4px">Acepta rutas locales (Windows/Mac), rutas de red (\\servidor) o URLs web.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost-dark" id="em-upload-btn" style="font-size:12px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Subir PDF desde mi equipo
+          </button>
+          <input type="file" id="em-file-input" accept="application/pdf,.pdf" style="display:none" />
+          <span id="em-file-status" style="font-size:11px;color:#666"></span>
+        </div>
+      </div>
+      <div class="form-field" id="em-status-field">
+        <label class="form-label">Estado</label>
+        <div class="status-selector" id="em-status">
+          <button class="status-opt" data-status="OFICIAL">Oficial</button>
+          <button class="status-opt" data-status="DESARROLLADO">Desarrollado</button>
+          <button class="status-opt" data-status="DESACTUALIZADO">Desactualizado</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="modal-foot-group">
+        <button class="btn btn-danger" id="em-delete">Eliminar</button>
+      </div>
+      <div class="modal-foot-group">
+        <button class="btn btn-ghost-dark" data-close>Cancelar</button>
+        <button class="btn btn-primary" id="em-save">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal-backdrop confirm" id="confirm-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-head-main">
+        <div class="modal-eyebrow">Confirmar eliminación</div>
+        <div class="modal-title">¿Eliminar este nodo?</div>
+      </div>
+      <button class="modal-close" data-close-confirm>✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="confirm-msg" id="cm-msg">Esta acción no se puede deshacer. Se eliminarán también todos sus nodos hijos.</div>
+      <div class="confirm-target" id="cm-target">—</div>
+    </div>
+    <div class="modal-foot">
+      <div></div>
+      <div class="modal-foot-group">
+        <button class="btn btn-ghost-dark" data-close-confirm>Cancelar</button>
+        <button class="btn btn-danger" id="cm-confirm">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast stack -->
+<div class="toast-stack" id="toasts"></div>
+
+<!-- Bulk Link Modal -->
+<div class="modal-backdrop" id="bulk-modal">
+  <div class="modal" style="max-width:720px;width:92vw">
+    <div class="modal-head">
+      <div class="modal-head-main">
+        <div class="modal-eyebrow">Vinculación masiva de documentos</div>
+        <div class="modal-title">Pega una lista de archivos</div>
+      </div>
+      <button class="modal-close" data-close-bulk>✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:#555;line-height:1.55;margin-bottom:12px">
+        Formatos aceptados (uno por línea). La app hace match <b>automaticamente por código</b> (p. ej. <code>GT-01-DUSAR-P-001</code>) entre el nombre/link y los procedimientos del árbol.
+        <ul style="margin:8px 0 0 16px;padding:0">
+          <li><code>GT-01-DUSAR-P-001 | https://1drv.ms/...</code></li>
+          <li><code>GT-01-DUSAR-P-001.docx https://1drv.ms/...</code> (separado por espacio/tab)</li>
+          <li>O solo pega los <b>nombres de archivo</b> en una columna y los <b>links</b> en otra (copiado de OneDrive)</li>
+        </ul>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Lista de archivos</label>
+        <textarea class="form-textarea" id="bulk-input" rows="10" placeholder="GT-01-DUSAR-P-001 | https://1drv.ms/...&#10;FA-01-EEGG-P-01 | https://1drv.ms/..." style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:12px"></textarea>
+      </div>
+      <div id="bulk-preview" style="font-size:12px;color:#555;margin-top:10px;min-height:20px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost-dark" id="bulk-preview-btn">Previsualizar matches</button>
+      <div class="modal-foot-group">
+        <button class="btn btn-ghost-dark" data-close-bulk>Cancelar</button>
+        <button class="btn btn-primary" id="bulk-apply">Vincular</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept="application/json" style="display:none" />
+
+<script>
+// Initial dataset for BPA tree — parsed from provided table.
+// Hierarchy: tipo → proceso → subproceso → (documento | instructivo under documento)
+
+(function() {
+  const raw = [
+    ["08 Formación Académica (FA)", "Pregrado - 01 Planificación Académica", "FA-FAC-P-01", "Procedimiento para la actualización del perfil del egresado"],
+    ["08 Formación Académica (FA)", "Pregrado - 01 Planificación Académica", "FA-01-EEGG/FAC-P-01", "Procedimiento para la elaboración de la propuesta docente pregrado"],
+    ["08 Formación Académica (FA)", "Pregrado - 01 Planificación Académica", "FA-01-EEGG/FAC-P-02", "Procedimiento para la elaboración/actualización del sílabo"],
+    ["08 Formación Académica (FA)", "Pregrado - 01 Planificación Académica", "FA-01-EEGG/FAC-P-03", "Procedimiento para la programación de evaluaciones pregrado"],
+    ["08 Formación Académica (FA)", "Pregrado - 01 Planificación Académica", "FA-01-EEGG/FAC-P-04", "Procedimiento para la publicación de material didáctico"],
+    ["08 Formación Académica (FA)", "¿Planificación o Gestión?", "FA-0X-EEGG/FAC-INS-01", "Instructivo para Estimación de Cantidad de Sección", "instructivo"],
+    ["08 Formación Académica (FA)", "Pregrado - 02 Ejecución", "FA-02-EEGG/FAC-P-001", "Procedimiento para el desarrollo académico pregrado"],
+    ["08 Formación Académica (FA)", "Pregrado - 02 Ejecución", "FA-02-EEGG/FAC-P-002", "Procedimiento para la evaluación del aprendizaje pregrado"],
+    ["08 Formación Académica (FA)", "Pregrado - 02 Ejecución", "FA-02-FAC-P-003", "Procedimiento el desarrollo de actividades complementarias"],
+    ["08 Formación Académica (FA)", "Pregrado - 03 Evaluación y Mejora Continua", "FA-EEGG/FAC-P-04", "Procedimiento para la mejora continua del proceso de formación académica"],
+    ["08 Formación Académica (FA)", "Posgrado - 01 Planificación Académica", "FA-01-EPG-P-01", "Procedimiento para elaboración de la propuesta docente – Escuela de Posgrado"],
+    ["08 Formación Académica (FA)", "Posgrado - 02 Ejecución", "FA-02-EPG-P-01", "Procedimiento para el desarrollo académico Escuela de Posgrado"],
+    ["08 Formación Académica (FA)", "Posgrado - 02 Ejecución", "FA-02-EPG-P-02", "Procedimiento para la evaluación del aprendizaje posgrado"],
+    ["08 Formación Académica (FA)", "Posgrado - 02 Ejecución", "FA-02-EPG-P-03", "Procedimiento para el proceso de convalidación de asignaturas – Escuela de Posgrado"],
+    ["08 Formación Académica (FA)", "Posgrado - 02 Ejecución", "FA-02-EPG-P-04", "Procedimiento para la selección de candidatos para el doctorado UPO – Escuela de Posgrado"],
+    ["08 Formación Académica (FA)", "Posgrado - 02 Ejecución", "FA-02-EPG-P-05", "Procedimiento para la revisión de sílabos de las maestrías – Escuela de Posgrado"],
+    ["09 Graduación y Titulación (GT)", "Pregrado - 01 Servicios Académicos", "GT-01-DUSAR-P-001", "Procedimiento para la emisión de documentos académicos oficiales", null, "C:\\Users\\npalacio\\Desktop\\proceso 09\\GT-01-DUSAR-P-001_Emision_Documentos_Academicos_1.docx"],
+    ["09 Graduación y Titulación (GT)", "Pregrado - 01 Servicios Académicos", "GT-01-DUSAR-P-002", "Procedimiento para obtener la condición de egresado"],
+    ["09 Graduación y Titulación (GT)", "Pregrado - 01 Servicios Académicos", "GT-01-DUSAR-P-003", "Procedimiento para la emisión de documentos de identificación"],
+    ["09 Graduación y Titulación (GT)", "Pregrado - 03 Titulación", "GT-03-FAC-P-005", "Procedimiento para otorgar el título profesional"],
+    ["09 Graduación y Titulación (GT)", "Posgrado - 02 Graduación", "GT-02-EPG-P-02", "Procedimiento para la obtención del grado de maestro en Derecho Empresarial y en Tributación y Política Fiscal"],
+    ["09 Graduación y Titulación (GT)", "Posgrado - 02 Graduación", "GT-02-EPG-P-003", "Procedimiento para la obtención del grado de maestro en Administración y Dirección de Negocios"],
+    ["08 Formación Académica (FA)", "Gestión Académica - Facultades", "", "Procedimiento para la convalidación de asignaturas"],
+    ["08 Formación Académica (FA)", "Gestión Académica - Facultades", "", "Procedimiento para la Elaboración y Publicación de Material Didáctico"],
+    ["08 Formación Académica (FA)", "Gestión Académica - Facultades", "", "Procedimiento para el Desarrollo Académico presencial y a distancia en Pregrado"],
+    ["08 Formación Académica (FA)", "Gestión Académica - Facultades", "", "Procedimiento para la planificación y ejecución de reuniones de coordinación académica por asignatura"],
+    ["08 Formación Académica (FA)", "Gestión Académica - Facultades", "FA-0X-EEGG/FAC-P-0X", "Procedimiento para la contratación de nuevos docentes"],
+    ["08 Formación Académica (FA)", "Gestión Académica - Facultades", "", "Procedimiento para la revisión y actualización anual de sílabos por comités de área"],
+    ["08 Formación Académica (FA)", "Gestión Académica - Facultades", "", "Procedimiento para la gestión de solicitudes de rectificación de matrícula y cruces de horario"],
+    ["08 Formación Académica (FA)", "Laboratorios y Recursos Tecnológicos", "", "Procedimiento para el uso y préstamo de equipos en laboratorios especializados"],
+    ["08 Formación Académica (FA)", "Laboratorios y Recursos Tecnológicos", "", "Procedimiento para la gestión de licencias de software especializado y acceso remoto"],
+    ["09 Graduación y Titulación (GT)", "Grados y Títulos - Facultades", "", "Procedimiento para la sustentación oral de tesis o trabajo de suficiencia profesional"],
+    ["09 Graduación y Titulación (GT)", "Grados y Títulos - Facultades", "", "Procedimiento para realizar un proceso de titulación por convocatoria"],
+    ["09 Graduación y Titulación (GT)", "Grados y Títulos - Facultades", "", "Procedimiento para la preparación de información de Grados y Títulos para aprobación institucional"],
+    ["08 Formación Académica (FA)", "Vinculación y Prácticas - Facultades", "", "Procedimiento para la validación académica de planes de aprendizaje en prácticas pre-profesionales"],
+    ["08 Formación Académica (FA)", "Vinculación y Prácticas - Facultades", "", "Procedimiento para la aprobación y el funcionamiento de consejos consultivos de las unidades académicas"],
+    ["08 Formación Académica (FA)", "Vinculación y Prácticas - Facultades", "", "Procedimiento para el Desarrollo de Actividades Complementarias presenciales y a distancia en pregrado"],
+    ["08 Formación Académica (FA)", "Vinculación y Prácticas - Facultades", "", "Procedimiento para la organización y ejecución de visitas técnicas e industriales"],
+    ["08 Formación Académica (FA)", "Vinculación y Prácticas - Facultades", "", "Procedimiento para la organización y ejecución de misiones académicas nacionales e internacionales"],
+    ["08 Formación Académica (FA)", "Vinculación y Prácticas - Facultades", "", "Procedimiento para el desarrollo de trabajos de investigación en empresas y organizaciones"],
+  ];
+
+  const AMBIGUOUS = new Set(["¿Planificación o Gestión?"]);
+
+  // Maps tipo name → node; each tipo has processes, etc
+  let nextId = 1;
+  const mkId = () => "n_" + (nextId++);
+
+  // Root tipo groupings — keep original order of first appearance
+  const tiposOrder = [];
+  const tiposMap = new Map();
+  // proceso grouped by tipo (we only have one proceso per tipo label in this dataset,
+  // so tipo name acts as both — but we split into tipo (short prefix) and proceso (full name)).
+  // For clarity, we use: tipo = "Formación Académica" (family), proceso = full label,
+  // subproceso = provided, documento = procedure name.
+
+  // Simpler approach: treat "08 Formación Académica (FA)" as a Proceso,
+  // and group into tipos "Procesos Misionales / Académicos" etc. based on prefix.
+  // For this dataset both tipos are "Procesos Misionales".
+  const TIPO_NAME = "Procesos Misionales";
+  const tipo = { id: mkId(), type: "tipo", name: TIPO_NAME, code: "", collapsed: false, children: [] };
+
+  const procesosMap = new Map(); // name -> node
+  const subprocesosMap = new Map(); // "tipoProc::sub" -> node
+
+  raw.forEach(row => {
+    const [procesoName, subprocesoName, code, docName, kind, path] = row;
+    let proceso = procesosMap.get(procesoName);
+    if (!proceso) {
+      proceso = { id: mkId(), type: "proceso", name: procesoName, code: "", collapsed: false, children: [] };
+      procesosMap.set(procesoName, proceso);
+      tipo.children.push(proceso);
+    }
+    const subKey = procesoName + "::" + subprocesoName;
+    let subp = subprocesosMap.get(subKey);
+    if (!subp) {
+      subp = {
+        id: mkId(), type: "subproceso",
+        name: subprocesoName,
+        code: "",
+        collapsed: false,
+        ambiguous: AMBIGUOUS.has(subprocesoName),
+        children: []
+      };
+      subprocesosMap.set(subKey, subp);
+      proceso.children.push(subp);
+    }
+    const node = {
+      id: mkId(),
+      type: kind === "instructivo" ? "instructivo" : "documento",
+      name: docName,
+      code: code || "",
+      path: path || "",
+      status: "OFICIAL",
+      collapsed: false,
+      children: []
+    };
+    subp.children.push(node);
+  });
+
+  window.INITIAL_TREE = {
+    version: 1,
+    roots: [tipo]
+  };
+  window.__nextIdCounter = nextId;
+})();
+
+</script>
+<script>
+/* ============================================================
+ * BPA Tree App
+ * Vanilla JS — no external dependencies.
+ * ============================================================ */
+
+(function () {
+  "use strict";
+
+  // ---------- Storage ----------
+  const STORAGE_KEY = "bpa_tree_v3";
+  const PREFS_KEY = "bpa_tree_prefs_v1";
+
+  // ---------- State ----------
+  let state = loadState();
+  let prefs = loadPrefs();
+  let search = "";
+  let statusFilter = ""; // "", OFICIAL, DESARROLLADO, DESACTUALIZADO
+  let openAddMenu = null;
+  let pendingDelete = null; // node id
+  let editingNodeId = null;
+  let saveTimer = null;
+
+  // ---------- DOM ----------
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  const treeEl = $("#tree");
+  const searchEl = $("#search");
+  const filterGroupEl = $("#filter-group");
+  const saveDotEl = $("#save-dot");
+  const saveTextEl = $("#save-text");
+
+  // ---------- Utilities ----------
+  function uid() {
+    const n = (window.__nextIdCounter || 1);
+    window.__nextIdCounter = n + 1;
+    return "n_" + n;
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.roots) return parsed;
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(window.INITIAL_TREE));
+  }
+
+  function loadPrefs() {
+    try {
+      const raw = localStorage.getItem(PREFS_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return { layout: "horizontal", density: "comfortable", showCodes: true };
+  }
+
+  function savePrefs() {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  }
+
+  function saveState() {
+    clearTimeout(saveTimer);
+    saveDotEl.classList.add("saving");
+    saveTextEl.textContent = "Guardando…";
+    saveTimer = setTimeout(() => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      saveDotEl.classList.remove("saving");
+      saveTextEl.textContent = "Guardado";
+    }, 280);
+  }
+
+  // ---------- Tree walking ----------
+  function walk(nodes, fn, parent = null) {
+    for (const n of nodes) {
+      fn(n, parent);
+      if (n.children) walk(n.children, fn, n);
+    }
+  }
+
+  function findNode(id, nodes = state.roots, parent = null) {
+    for (const n of nodes) {
+      if (n.id === id) return { node: n, parent, siblings: nodes };
+      if (n.children) {
+        const r = findNode(id, n.children, n);
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+
+  function removeNode(id) {
+    const found = findNode(id);
+    if (!found) return null;
+    const idx = found.siblings.indexOf(found.node);
+    found.siblings.splice(idx, 1);
+    return found.node;
+  }
+
+  function countDescendants(node, predicate) {
+    let c = 0;
+    if (node.children) {
+      for (const ch of node.children) {
+        if (predicate(ch)) c++;
+        c += countDescendants(ch, predicate);
+      }
+    }
+    return c;
+  }
+
+  // ---------- Node type helpers ----------
+  const ORDER = ["tipo", "proceso", "subproceso", "documento", "instructivo", "formato"];
+  const TYPE_LABEL = {
+    tipo: "Tipo de proceso",
+    proceso: "Proceso",
+    subproceso: "Subproceso",
+    documento: "Documento",
+    instructivo: "Instructivo",
+    formato: "Formato",
+  };
+
+  function childTypesAllowed(parentType) {
+    switch (parentType) {
+      case null: case undefined: return ["tipo"];
+      case "tipo": return ["proceso"];
+      case "proceso": return ["subproceso"];
+      case "subproceso": return ["documento"];
+      case "documento": return ["instructivo", "formato"];
+      case "instructivo": return ["formato"];
+      case "formato": return [];
+      default: return [];
+    }
+  }
+
+  function canMoveInto(node, newParent) {
+    // newParent null = root level
+    const parentType = newParent ? newParent.type : null;
+    const allowed = childTypesAllowed(parentType);
+    if (!allowed.includes(node.type)) return false;
+    // don't allow moving into own descendant
+    if (newParent && isDescendant(newParent, node)) return false;
+    return true;
+  }
+
+  function isDescendant(candidate, ancestor) {
+    if (candidate.id === ancestor.id) return true;
+    if (!ancestor.children) return false;
+    for (const ch of ancestor.children) {
+      if (isDescendant(candidate, ch)) return true;
+    }
+    return false;
+  }
+
+  // ---------- Rendering ----------
+  function matchesFilter(node) {
+    // Returns true if the node OR any descendant matches current search/filter
+    const q = search.trim().toLowerCase();
+    let selfMatch = true;
+    if (q) {
+      const hay = (node.name + " " + (node.code || "")).toLowerCase();
+      selfMatch = hay.includes(q);
+    }
+    if (statusFilter && (node.type === "documento" || node.type === "instructivo" || node.type === "formato")) {
+      if ((node.status || "OFICIAL") !== statusFilter) selfMatch = false;
+    } else if (statusFilter && node.type !== "documento" && node.type !== "instructivo" && node.type !== "formato") {
+      // non-doc nodes don't satisfy status filter on their own
+      selfMatch = false;
+    }
+    if (selfMatch) return true;
+    if (node.children) {
+      for (const ch of node.children) if (matchesFilter(ch)) return true;
+    }
+    return false;
+  }
+
+  // FLIP-style reorder animation
+  function reorderWithFlip(arr, fromIdx, toIdx) {
+    // Capture positions of all node elements before mutation
+    const firstRects = new Map();
+    document.querySelectorAll("#tree .node").forEach((el) => {
+      const id = el.dataset.id;
+      if (id) firstRects.set(id, el.getBoundingClientRect());
+    });
+    // Mutate
+    const [moved] = arr.splice(fromIdx, 1);
+    arr.splice(toIdx, 0, moved);
+    saveState();
+    render();
+    // Capture new positions and animate deltas
+    requestAnimationFrame(() => {
+      document.querySelectorAll("#tree .node").forEach((el) => {
+        const id = el.dataset.id;
+        if (!id) return;
+        const prev = firstRects.get(id);
+        if (!prev) return;
+        const next = el.getBoundingClientRect();
+        const dx = prev.left - next.left;
+        const dy = prev.top - next.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        el.style.transition = "none";
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 0.32s cubic-bezier(.2,.7,.2,1)";
+          el.style.transform = "";
+          setTimeout(() => {
+            el.style.transition = "";
+          }, 360);
+        });
+      });
+    });
+  }
+
+  function render() {
+    treeEl.innerHTML = "";
+    if (!state.roots || state.roots.length === 0) {
+      treeEl.innerHTML = `<div class="empty-state">
+        <strong>No hay nodos.</strong>
+        <div>Importa un JSON o restaura los datos iniciales.</div>
+      </div>`;
+      updateStats();
+      return;
+    }
+    for (const root of state.roots) {
+      const row = renderRow(root, 0);
+      if (row) treeEl.appendChild(row);
+    }
+    updateStats();
+    applyPrefs();
+  }
+
+  function renderRow(node, depth) {
+    if (!matchesFilter(node)) return null;
+
+    const row = document.createElement("li");
+    row.className = "node-row";
+    row.dataset.id = node.id;
+
+    // connector for non-root rows
+    const conn = document.createElement("div");
+    conn.className = "connector";
+    row.appendChild(conn);
+
+    // node wrapper + children
+    const wrap = document.createElement("div");
+    wrap.className = "node-wrap";
+
+    const hasChildren = node.children && node.children.length > 0;
+
+    // Render visible children list (post-filter)
+    const visibleChildren = (node.children || []).filter(matchesFilter);
+
+    const nodeEl = document.createElement("div");
+    nodeEl.className = "node";
+    nodeEl.dataset.type = node.type;
+    nodeEl.dataset.id = node.id;
+    if (node.type === "documento" || node.type === "instructivo" || node.type === "formato") {
+      nodeEl.dataset.status = node.status || "OFICIAL";
+    }
+    nodeEl.draggable = true;
+
+    // Toggle
+    const toggle = document.createElement("button");
+    toggle.className = "node-toggle" + (hasChildren ? "" : " empty") + (node.collapsed ? " collapsed" : "");
+    toggle.innerHTML = hasChildren
+      ? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
+      : `<svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>`;
+    toggle.title = node.collapsed ? "Expandir" : "Colapsar";
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!hasChildren) return;
+      node.collapsed = !node.collapsed;
+      saveState();
+      render();
+    });
+    nodeEl.appendChild(toggle);
+
+    // Body
+    const body = document.createElement("div");
+    body.className = "node-body";
+
+    // Main content
+    const main = document.createElement("div");
+    main.className = "node-main";
+    const title = document.createElement("div");
+    title.className = "node-title";
+    title.textContent = node.name || "(sin nombre)";
+    main.appendChild(title);
+
+    if (node.code) {
+      const code = document.createElement("div");
+      code.className = "node-code";
+      code.textContent = node.code;
+      main.appendChild(code);
+    }
+
+    if (node.type === "subproceso" && node.ambiguous) {
+      const warn = document.createElement("div");
+      warn.className = "warn-badge";
+      warn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Por definir
+      `;
+      main.appendChild(warn);
+    }
+    body.appendChild(main);
+
+    // Status pill for docs/instructivos
+    if (node.type === "documento" || node.type === "instructivo" || node.type === "formato") {
+      const pill = document.createElement("button");
+      pill.className = "status-pill";
+      pill.dataset.status = node.status || "OFICIAL";
+      pill.textContent = node.status || "OFICIAL";
+      pill.title = "Click para cambiar estado";
+      pill.addEventListener("click", (e) => {
+        e.stopPropagation();
+        cycleStatus(node);
+      });
+      body.appendChild(pill);
+    }
+
+    // Count of children (for containers)
+    if (node.type !== "documento" && node.type !== "instructivo" && hasChildren) {
+      const docCount = countDescendants(node, (n) => n.type === "documento");
+      if (docCount > 0) {
+        const cnt = document.createElement("span");
+        cnt.className = "node-count";
+        cnt.textContent = docCount + (docCount === 1 ? " doc" : " docs");
+        body.appendChild(cnt);
+      }
+    }
+
+    // Actions
+    const actions = document.createElement("div");
+    actions.className = "node-actions";
+    const allowedChildren = childTypesAllowed(node.type);
+    if (allowedChildren.length > 0) {
+      const addBtn = document.createElement("button");
+      addBtn.className = "node-action light";
+      addBtn.title = "Agregar " + allowedChildren.map((t) => TYPE_LABEL[t].toLowerCase()).join("/");
+      addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+      addBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openAddChildMenu(e.currentTarget, node);
+      });
+      actions.appendChild(addBtn);
+    }
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "node-action light";
+    editBtn.title = "Editar";
+    editBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEditModal(node.id);
+    });
+    actions.appendChild(editBtn);
+
+    // Reorder buttons — up/down among siblings
+    const parentArr = findNode(node.id)?.siblings;
+    const idx = parentArr ? parentArr.indexOf(node) : -1;
+    if (false && parentArr && idx >= 0) {
+      if (idx > 0) {
+        const upBtn = document.createElement("button");
+        upBtn.className = "node-action light";
+        upBtn.title = "Subir";
+        upBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`;
+        upBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const i = parentArr.indexOf(node);
+          if (i > 0) { reorderWithFlip(parentArr, i, i - 1); }
+        });
+        actions.appendChild(upBtn);
+      }
+      if (idx < parentArr.length - 1) {
+        const downBtn = document.createElement("button");
+        downBtn.className = "node-action light";
+        downBtn.title = "Bajar";
+        downBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+        downBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const i = parentArr.indexOf(node);
+          if (i < parentArr.length - 1) { reorderWithFlip(parentArr, i, i + 1); }
+        });
+        actions.appendChild(downBtn);
+      }
+    }
+
+    // Open button for documents/instructivos/formatos
+    if (node.type === "documento" || node.type === "instructivo" || node.type === "formato") {
+      const openBtn = document.createElement("button");
+      openBtn.className = "node-action light";
+      openBtn.title = node.path ? "Abrir documento" : "Agregar ruta y abrir";
+      openBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+      if (node.path) openBtn.style.color = "#E8450A";
+      openBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openSidePanel(node.id);
+      });
+      actions.appendChild(openBtn);
+    }
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "node-action light";
+    delBtn.title = "Eliminar";
+    delBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      requestDelete(node);
+    });
+    actions.appendChild(delBtn);
+
+    body.appendChild(actions);
+
+    // Double click to edit
+    body.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      openEditModal(node.id);
+    });
+
+    // Drag & drop
+    nodeEl.addEventListener("dragstart", (e) => {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", node.id);
+      nodeEl.classList.add("dragging");
+    });
+    nodeEl.addEventListener("dragend", () => {
+      nodeEl.classList.remove("dragging");
+      document.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+    });
+    nodeEl.addEventListener("dragover", (e) => {
+      const draggedId = getDraggedId();
+      if (!draggedId || draggedId === node.id) return;
+      const dragged = findNode(draggedId);
+      if (!dragged) return;
+      // Determine drop zone: top strip = before, bottom strip = after, middle = into
+      const rect = nodeEl.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const h = rect.height;
+      const edge = Math.min(12, h * 0.28);
+      let mode;
+      if (y < edge) mode = "before";
+      else if (y > h - edge) mode = "after";
+      else mode = "into";
+      // Validate
+      const info = findNode(node.id);
+      const sibParent = info?.parent || null; // null = root level
+      const canInto = canMoveInto(dragged.node, node);
+      const canSibling = canMoveInto(dragged.node, sibParent) && dragged.node !== node;
+      let allowed = false;
+      if (mode === "into" && canInto) allowed = true;
+      else if ((mode === "before" || mode === "after") && canSibling) allowed = true;
+      else if (mode === "into" && canSibling) { mode = "after"; allowed = true; }
+      else if ((mode === "before" || mode === "after") && canInto) { mode = "into"; allowed = true; }
+      if (!allowed) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      nodeEl.classList.remove("drag-over", "drag-before", "drag-after");
+      if (mode === "into") nodeEl.classList.add("drag-over");
+      else if (mode === "before") nodeEl.classList.add("drag-before");
+      else nodeEl.classList.add("drag-after");
+      nodeEl.dataset.dropMode = mode;
+    });
+    nodeEl.addEventListener("dragleave", () => {
+      nodeEl.classList.remove("drag-over", "drag-before", "drag-after");
+      delete nodeEl.dataset.dropMode;
+    });
+    nodeEl.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const mode = nodeEl.dataset.dropMode || "into";
+      nodeEl.classList.remove("drag-over", "drag-before", "drag-after");
+      delete nodeEl.dataset.dropMode;
+      const draggedId = e.dataTransfer.getData("text/plain");
+      if (!draggedId || draggedId === node.id) return;
+      if (mode === "into") doMove(draggedId, node);
+      else doReorder(draggedId, node, mode);
+    });
+
+    nodeEl.appendChild(body);
+    wrap.appendChild(nodeEl);
+
+    // Children (only if not collapsed)
+    if (hasChildren && !node.collapsed && visibleChildren.length > 0) {
+      const childrenWrap = document.createElement("ul");
+      childrenWrap.className = "children-wrap";
+      for (const ch of visibleChildren) {
+        const childRow = renderRow(ch, depth + 1);
+        if (childRow) childrenWrap.appendChild(childRow);
+      }
+      wrap.appendChild(childrenWrap);
+    }
+
+    row.appendChild(wrap);
+    return row;
+  }
+
+  function getDraggedId() {
+    const dragging = document.querySelector(".node.dragging");
+    return dragging ? dragging.dataset.id : null;
+  }
+
+  function doReorder(draggedId, targetNode, mode) {
+    const dragged = findNode(draggedId);
+    const targetInfo = findNode(targetNode.id);
+    if (!dragged || !targetInfo) return;
+    const sibParent = targetInfo.parent; // null = root
+    if (!canMoveInto(dragged.node, sibParent)) {
+      toast("No se puede mover ahí", "error");
+      return;
+    }
+    // FLIP snapshot
+    const firstRects = new Map();
+    document.querySelectorAll("#tree .node").forEach((el) => {
+      const id = el.dataset.id;
+      if (id) firstRects.set(id, el.getBoundingClientRect());
+    });
+    // Remove dragged from its current siblings
+    const fromIdx = dragged.siblings.indexOf(dragged.node);
+    if (fromIdx >= 0) dragged.siblings.splice(fromIdx, 1);
+    // Target array after removal (could be same array)
+    const targetArr = sibParent ? (sibParent.children || (sibParent.children = [])) : state.roots;
+    let targetIdx = targetArr.indexOf(targetNode);
+    if (targetIdx < 0) targetIdx = targetArr.length;
+    const insertAt = mode === "after" ? targetIdx + 1 : targetIdx;
+    targetArr.splice(insertAt, 0, dragged.node);
+    saveState();
+    render();
+    playFlip(firstRects, draggedId);
+    toast(`Reordenado`, "success");
+  }
+
+  function playFlip(firstRects, highlightId) {
+    requestAnimationFrame(() => {
+      document.querySelectorAll("#tree .node").forEach((el) => {
+        const id = el.dataset.id;
+        if (!id) return;
+        const prev = firstRects.get(id);
+        if (!prev) return;
+        const next = el.getBoundingClientRect();
+        const dx = prev.left - next.left;
+        const dy = prev.top - next.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        el.style.transition = "none";
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        if (id === highlightId) el.classList.add("flash-move");
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 0.38s cubic-bezier(.2,.7,.2,1)";
+          el.style.transform = "";
+          setTimeout(() => {
+            el.style.transition = "";
+            el.classList.remove("flash-move");
+          }, 450);
+        });
+      });
+    });
+  }
+
+  function doMove(draggedId, newParent) {
+    const dragged = findNode(draggedId);
+    if (!dragged) return;
+    if (!canMoveInto(dragged.node, newParent)) {
+      toast("No se puede mover ahí", "error");
+      return;
+    }
+    // FLIP: capture positions before mutation
+    const firstRects = new Map();
+    document.querySelectorAll("#tree .node").forEach((el) => {
+      const id = el.dataset.id;
+      if (id) firstRects.set(id, el.getBoundingClientRect());
+    });
+    // remove from old
+    const idx = dragged.siblings.indexOf(dragged.node);
+    dragged.siblings.splice(idx, 1);
+    // add to new
+    if (!newParent.children) newParent.children = [];
+    newParent.children.push(dragged.node);
+    newParent.collapsed = false;
+    saveState();
+    render();
+    // FLIP: play animations from previous positions
+    playFlip(firstRects, draggedId);
+    toast(`Movido a "${truncate(newParent.name, 40)}"`, "success");
+  }
+
+  function truncate(s, n) {
+    s = s || "";
+    return s.length > n ? s.slice(0, n - 1) + "…" : s;
+  }
+
+  // ---------- Status cycle ----------
+  const STATUS_CYCLE = ["OFICIAL", "DESARROLLADO", "DESACTUALIZADO"];
+  function cycleStatus(node) {
+    const cur = node.status || "OFICIAL";
+    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(cur) + 1) % STATUS_CYCLE.length];
+    node.status = next;
+    saveState();
+    render();
+  }
+
+  // ---------- Stats ----------
+  function updateStats() {
+    let total = 0, ofi = 0, des = 0, old = 0;
+    walk(state.roots || [], (n) => {
+      if (n.type === "documento" || n.type === "instructivo" || n.type === "formato") {
+        total++;
+        const s = n.status || "OFICIAL";
+        if (s === "OFICIAL") ofi++;
+        else if (s === "DESARROLLADO") des++;
+        else if (s === "DESACTUALIZADO") old++;
+      }
+    });
+    $("#st-total").textContent = total;
+    $("#st-oficial").textContent = ofi;
+    $("#st-desarrollado").textContent = des;
+    $("#st-desactualizado").textContent = old;
+  }
+
+  // ---------- Add child menu ----------
+  function openAddChildMenu(anchorEl, parentNode) {
+    closeAddMenu();
+    const allowed = childTypesAllowed(parentNode.type);
+    if (allowed.length === 0) return;
+    const menu = document.createElement("div");
+    menu.className = "add-menu";
+    const COLORS = {
+      tipo: "#1A1A1A", proceso: "#E8450A", subproceso: "#3A3A3A",
+      documento: "#F5F5F5", instructivo: "#FFF4EE", formato: "#E8F0FE"
+    };
+    for (const t of allowed) {
+      const item = document.createElement("button");
+      item.className = "add-menu-item";
+      item.innerHTML = `<span class="sw" style="background:${COLORS[t]}; border:1px solid rgba(0,0,0,0.1)"></span>Agregar ${TYPE_LABEL[t].toLowerCase()}`;
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        addChild(parentNode, t);
+        closeAddMenu();
+      });
+      menu.appendChild(item);
+    }
+    document.body.appendChild(menu);
+    const rect = anchorEl.getBoundingClientRect();
+    menu.style.left = Math.min(rect.left, window.innerWidth - 200) + "px";
+    menu.style.top = (rect.bottom + 4) + "px";
+    openAddMenu = menu;
+    setTimeout(() => document.addEventListener("click", closeAddMenu, { once: true }), 0);
+  }
+
+  function closeAddMenu() {
+    if (openAddMenu) { openAddMenu.remove(); openAddMenu = null; }
+  }
+
+  function addChild(parent, type) {
+    const node = {
+      id: uid(),
+      type,
+      name: defaultNameFor(type),
+      code: "",
+      collapsed: false,
+      children: []
+    };
+    if (type === "documento" || type === "instructivo" || type === "formato") node.status = "OFICIAL";
+    if (!parent.children) parent.children = [];
+    parent.children.push(node);
+    parent.collapsed = false;
+    saveState();
+    render();
+    openEditModal(node.id);
+  }
+
+  function defaultNameFor(type) {
+    return ({
+      tipo: "Nuevo tipo de proceso",
+      proceso: "Nuevo proceso",
+      subproceso: "Nuevo subproceso",
+      documento: "Nuevo procedimiento",
+      instructivo: "Nuevo instructivo",
+      formato: "Nuevo formato",
+    })[type] || "Nuevo nodo";
+  }
+
+  function addRoot() {
+    const node = {
+      id: uid(), type: "tipo",
+      name: defaultNameFor("tipo"),
+      code: "", collapsed: false, children: []
+    };
+    state.roots.push(node);
+    saveState(); render();
+    openEditModal(node.id);
+  }
+
+  // ---------- Edit Modal ----------
+  function openEditModal(nodeId) {
+    const found = findNode(nodeId);
+    if (!found) return;
+    editingNodeId = nodeId;
+    const node = found.node;
+    $("#em-eyebrow").textContent = TYPE_LABEL[node.type] || "Nodo";
+    $("#em-title").textContent = node.name || "(sin nombre)";
+    $("#em-name").value = node.name || "";
+    $("#em-code").value = node.code || "";
+
+    // Path field only for documents/instructivos
+    const isDoc = node.type === "documento" || node.type === "instructivo" || node.type === "formato";
+    $("#em-path-field").style.display = isDoc ? "" : "none";
+    $("#em-path").value = node.path || "";
+    // Update file status indicator
+    const fileStatus = $("#em-file-status");
+    if (isDoc && fileStatus) {
+      const p = node.path || "";
+      if (p.startsWith("data:application/pdf")) {
+        const sizeKb = Math.round(p.length * 0.75 / 1024);
+        fileStatus.innerHTML = `<span style="color:#2E7D2E">✓ PDF cargado</span> · ~${sizeKb} KB · <button type="button" id="em-file-clear" style="background:none;border:none;color:#D32F2F;cursor:pointer;font-size:11px;text-decoration:underline;padding:0">quitar</button>`;
+        const clearBtn = document.getElementById("em-file-clear");
+        if (clearBtn) clearBtn.addEventListener("click", () => {
+          $("#em-path").value = "";
+          fileStatus.textContent = "";
+        });
+      } else {
+        fileStatus.textContent = "";
+      }
+    }
+
+    // Toggle status field
+    const showStatus = isDoc;
+    $("#em-status-field").style.display = showStatus ? "" : "none";
+    if (showStatus) {
+      const cur = node.status || "OFICIAL";
+      $$("#em-status .status-opt").forEach((b) => {
+        b.classList.toggle("sel", b.dataset.status === cur);
+      });
+    }
+
+    // Code field hidden for tipo (optional)
+    $("#em-code-field").style.display = "";
+
+    $("#edit-modal").classList.add("open");
+    setTimeout(() => $("#em-name").focus(), 40);
+  }
+
+  function closeEditModal() {
+    $("#edit-modal").classList.remove("open");
+    editingNodeId = null;
+  }
+
+  function saveEditModal() {
+    if (!editingNodeId) return;
+    const found = findNode(editingNodeId);
+    if (!found) return;
+    const node = found.node;
+    node.name = $("#em-name").value.trim() || node.name;
+    node.code = $("#em-code").value.trim();
+    if (node.type === "documento" || node.type === "instructivo" || node.type === "formato") {
+      node.path = $("#em-path").value.trim();
+      const fname = $("#em-path").dataset.filename;
+      if (fname && node.path.startsWith("data:")) {
+        node.filename = fname;
+      } else if (!node.path.startsWith("data:")) {
+        delete node.filename;
+      }
+      const sel = $$("#em-status .status-opt").find((b) => b.classList.contains("sel"));
+      if (sel) node.status = sel.dataset.status;
+    }
+    saveState();
+    render();
+    closeEditModal();
+    toast("Cambios guardados", "success");
+  }
+
+  // ---------- Delete flow ----------
+  function requestDelete(node) {
+    pendingDelete = node.id;
+    $("#cm-target").textContent = `${TYPE_LABEL[node.type]}: ${node.name}`;
+    const desc = countDescendants(node, () => true);
+    $("#cm-msg").textContent = desc > 0
+      ? `Esta acción no se puede deshacer. Se eliminarán también ${desc} nodo${desc === 1 ? "" : "s"} hijo${desc === 1 ? "" : "s"}.`
+      : `Esta acción no se puede deshacer.`;
+    $("#confirm-modal").classList.add("open");
+  }
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    const n = removeNode(pendingDelete);
+    pendingDelete = null;
+    $("#confirm-modal").classList.remove("open");
+    saveState();
+    render();
+    if (n) toast(`"${truncate(n.name, 40)}" eliminado`, "info");
+  }
+
+  // ---------- Toast ----------
+  function toast(msg, kind = "info") {
+    const el = document.createElement("div");
+    el.className = "toast " + kind;
+    el.textContent = msg;
+    $("#toasts").appendChild(el);
+    setTimeout(() => {
+      el.style.transition = "opacity 0.3s, transform 0.3s";
+      el.style.opacity = "0";
+      el.style.transform = "translateY(6px)";
+      setTimeout(() => el.remove(), 320);
+    }, 2200);
+  }
+
+  // ---------- Import / Export ----------
+  function exportJSON() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date();
+    const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+      "-" + String(d.getDate()).padStart(2, "0");
+    a.href = url;
+    a.download = `bpa-tree-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("JSON exportado", "success");
+  }
+
+  function importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data || !data.roots || !Array.isArray(data.roots)) {
+          throw new Error("Estructura inválida");
+        }
+        // refresh id counter
+        let maxN = 0;
+        walk(data.roots, (n) => {
+          const m = /^n_(\d+)$/.exec(n.id || "");
+          if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+        });
+        window.__nextIdCounter = maxN + 1;
+        state = data;
+        saveState();
+        render();
+        toast("JSON importado", "success");
+      } catch (err) {
+        toast("Error al importar: " + err.message, "error");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- Expand / collapse all ----------
+  function setAllCollapsed(v) {
+    walk(state.roots, (n) => { if (n.children && n.children.length) n.collapsed = v; });
+    saveState();
+    render();
+  }
+
+  // ---------- Prefs / Tweaks ----------
+  function applyPrefs() {
+    document.body.classList.toggle("layout-indented", prefs.layout === "indented");
+    document.body.classList.toggle("density-compact", prefs.density === "compact");
+    document.body.classList.toggle("hide-codes", !prefs.showCodes);
+  }
+
+  // ---------- Event wiring ----------
+  searchEl.addEventListener("input", (e) => { search = e.target.value; render(); });
+  filterGroupEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".filter-chip");
+    if (!btn) return;
+    $$(".filter-chip").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    statusFilter = btn.dataset.status || "";
+    render();
+  });
+
+  // ---------- Bulk link ----------
+  function parseBulkInput(text) {
+    const lines = (text || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const items = [];
+    for (const line of lines) {
+      // Extract URL (first http[s]://... on the line)
+      const urlMatch = line.match(/https?:\/\/\S+/);
+      const url = urlMatch ? urlMatch[0] : null;
+      // Everything else is name candidate
+      let rest = urlMatch ? line.replace(urlMatch[0], "") : line;
+      rest = rest.replace(/[|\t]/g, " ").replace(/\s+/g, " ").trim();
+      items.push({ raw: line, name: rest, url });
+    }
+    return items;
+  }
+
+  // Extract a code pattern from any string (e.g. "GT-01-DUSAR-P-001", "FA-01-EEGG/FAC-P-01", "FA-0X-EEGG/FAC-INS-01")
+  function extractCode(s) {
+    if (!s) return null;
+    // Match patterns like XX-NN-YYYY[/ZZZ]-(P|INS|F)-NNN  (flexible)
+    const re = /[A-Z]{2}-[0-9A-Z]{1,3}-[A-Z\/]+-(?:P|INS|F)-[0-9]{2,4}/i;
+    const m = s.match(re);
+    return m ? m[0].toUpperCase().replace(/\s/g, "") : null;
+  }
+
+  function findNodeByCode(code) {
+    let found = null;
+    const norm = (c) => (c || "").toUpperCase().replace(/\s/g, "");
+    const target = norm(code);
+    walk(state.roots || [], (n) => {
+      if (!found && n.code && norm(n.code) === target) found = n;
+    });
+    return found;
+  }
+
+  function previewBulk() {
+    const items = parseBulkInput($("#bulk-input").value);
+    if (!items.length) { $("#bulk-preview").innerHTML = "<span style='color:#999'>Sin entradas</span>"; return { matches: [], misses: [] }; }
+    const matches = [], misses = [];
+    for (const it of items) {
+      const code = extractCode(it.name) || extractCode(it.raw);
+      if (!code || !it.url) { misses.push(it); continue; }
+      const node = findNodeByCode(code);
+      if (node) matches.push({ code, node, url: it.url });
+      else misses.push({ ...it, code });
+    }
+    $("#bulk-preview").innerHTML =
+      `<b style='color:#2E7D2E'>${matches.length} match✓</b> · ` +
+      `<b style='color:#D32F2F'>${misses.length} sin match</b>` +
+      (misses.length ? ` <span style='color:#888'>(primeros: ${misses.slice(0,3).map(m=>(m.code||m.name||'?')).join(', ')}${misses.length>3?'…':''})</span>` : "");
+    return { matches, misses };
+  }
+
+  function applyBulk() {
+    const { matches } = previewBulk();
+    if (!matches.length) { toast("No hubo matches", "error"); return; }
+    matches.forEach(({ node, url }) => { node.path = url; });
+    saveState(); render();
+    toast(`${matches.length} documentos vinculados`, "success");
+    $("#bulk-modal").classList.remove("open");
+  }
+
+  $$("#bulk-modal [data-close-bulk]").forEach((b) => b.addEventListener("click", () => $("#bulk-modal").classList.remove("open")));
+  $("#btn-bulk-link").addEventListener("click", () => {
+    $("#bulk-input").value = "";
+    $("#bulk-preview").innerHTML = "";
+    $("#bulk-modal").classList.add("open");
+    setTimeout(() => $("#bulk-input").focus(), 50);
+  });
+  $("#bulk-preview-btn").addEventListener("click", previewBulk);
+  $("#bulk-apply").addEventListener("click", applyBulk);
+
+  $("#btn-export").addEventListener("click", exportJSON);
+  $("#btn-import").addEventListener("click", () => $("#file-input").click());
+  $("#file-input").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (f) importJSON(f);
+    e.target.value = "";
+  });
+  $("#btn-expand-all").addEventListener("click", () => setAllCollapsed(false));
+  $("#btn-collapse-all").addEventListener("click", () => setAllCollapsed(true));
+  $("#btn-reset").addEventListener("click", () => {
+    if (confirm("¿Restaurar los datos iniciales? Se perderán los cambios no exportados.")) {
+      state = JSON.parse(JSON.stringify(window.INITIAL_TREE));
+      saveState();
+      render();
+      toast("Datos restaurados", "info");
+    }
+  });
+
+  // Edit modal events
+  $$("#edit-modal [data-close]").forEach((b) => b.addEventListener("click", closeEditModal));
+  $("#edit-modal").addEventListener("click", (e) => {
+    if (e.target.id === "edit-modal") closeEditModal();
+  });
+  $("#em-save").addEventListener("click", saveEditModal);
+
+  // Upload PDF handlers
+  $("#em-upload-btn").addEventListener("click", () => $("#em-file-input").click());
+  $("#em-file-input").addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+      toast("Solo se permiten archivos PDF", "error");
+      return;
+    }
+    const MAX = 8 * 1024 * 1024; // 8MB
+    if (file.size > MAX) {
+      toast(`PDF muy grande (${(file.size/1024/1024).toFixed(1)} MB). Máximo 8 MB.`, "error");
+      return;
+    }
+    const status = $("#em-file-status");
+    status.innerHTML = `<span style="color:#888">Cargando${file.name.length > 30 ? "" : ' "' + file.name + '"'}…</span>`;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      $("#em-path").value = dataUrl;
+      // Store filename in dataset on the input so saveEditModal can pick it up
+      $("#em-path").dataset.filename = file.name;
+      const sizeKb = Math.round(file.size / 1024);
+      status.innerHTML = `<span style="color:#2E7D2E">✓ PDF cargado</span> · ${sizeKb} KB · <button type="button" id="em-file-clear" style="background:none;border:none;color:#D32F2F;cursor:pointer;font-size:11px;text-decoration:underline;padding:0">quitar</button>`;
+      const clearBtn = document.getElementById("em-file-clear");
+      if (clearBtn) clearBtn.addEventListener("click", () => {
+        $("#em-path").value = "";
+        delete $("#em-path").dataset.filename;
+        status.textContent = "";
+      });
+    };
+    reader.onerror = () => {
+      status.innerHTML = `<span style="color:#D32F2F">Error al leer el archivo</span>`;
+    };
+    reader.readAsDataURL(file);
+  });
+  $("#em-delete").addEventListener("click", () => {
+    if (!editingNodeId) return;
+    const found = findNode(editingNodeId);
+    closeEditModal();
+    if (found) requestDelete(found.node);
+  });
+  $$("#em-status .status-opt").forEach((b) => {
+    b.addEventListener("click", () => {
+      $$("#em-status .status-opt").forEach((o) => o.classList.remove("sel"));
+      b.classList.add("sel");
+    });
+  });
+
+  // Confirm modal
+  $$("#confirm-modal [data-close-confirm]").forEach((b) =>
+    b.addEventListener("click", () => {
+      $("#confirm-modal").classList.remove("open");
+      pendingDelete = null;
+    })
+  );
+  $("#cm-confirm").addEventListener("click", confirmDelete);
+
+  // Keyboard
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeEditModal();
+      $("#confirm-modal").classList.remove("open");
+      closeAddMenu();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+      e.preventDefault();
+      exportJSON();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && editingNodeId) {
+      e.preventDefault();
+      saveEditModal();
+    }
+  });
+
+  // ---------- Tweaks Panel ----------
+  window.addEventListener("message", (e) => {
+    if (!e.data) return;
+    if (e.data.type === "__activate_edit_mode") showTweaks();
+    if (e.data.type === "__deactivate_edit_mode") hideTweaks();
+  });
+  // announce after listener is registered
+  window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+
+  let tweaksEl = null;
+  function showTweaks() {
+    if (tweaksEl) { tweaksEl.style.display = "block"; return; }
+    const el = document.createElement("div");
+    el.id = "tweaks-panel";
+    el.innerHTML = `
+      <style>
+        #tweaks-panel {
+          position: fixed; top: 100px; right: 20px; width: 280px;
+          background: #fff; border: 1px solid #D0D0D0;
+          box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+          z-index: 500; font-size: 13px;
+        }
+        #tweaks-panel .tp-head {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 12px 14px; border-bottom: 1px solid #EEE; cursor: move;
+          background: #1A1A1A; color: #fff;
+        }
+        #tweaks-panel .tp-title { font-weight: 600; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; }
+        #tweaks-panel .tp-close { color: #fff; font-size: 16px; background: none; border: none; cursor: pointer; }
+        #tweaks-panel .tp-body { padding: 14px; display: flex; flex-direction: column; gap: 16px; max-height: 70vh; overflow: auto; }
+        #tweaks-panel .tp-section-title { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+        #tweaks-panel .tp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+        #tweaks-panel .tp-row label { font-size: 12.5px; color: #333; }
+        #tweaks-panel .tp-seg { display: flex; border: 1px solid #D0D0D0; }
+        #tweaks-panel .tp-seg button { padding: 6px 10px; font-size: 11px; background: #fff; border: none; cursor: pointer; color: #555; }
+        #tweaks-panel .tp-seg button.sel { background: #1A1A1A; color: #fff; }
+        #tweaks-panel .tp-btn { padding: 8px 10px; background: #E8450A; color: #fff; border: none; cursor: pointer; font-size: 12px; font-weight: 500; text-align: left; width: 100%; margin-bottom: 4px; }
+        #tweaks-panel .tp-btn.secondary { background: #fff; color: #1A1A1A; border: 1px solid #D0D0D0; }
+        #tweaks-panel .tp-btn:hover { filter: brightness(1.08); }
+        #tweaks-panel input[type="checkbox"] { accent-color: #E8450A; }
+      </style>
+      <div class="tp-head">
+        <div class="tp-title">Tweaks</div>
+        <button class="tp-close" data-close>✕</button>
+      </div>
+      <div class="tp-body">
+        <div>
+          <div class="tp-section-title">Layout</div>
+          <div class="tp-seg" data-group="layout">
+            <button data-val="horizontal">Horizontal</button>
+            <button data-val="indented">Indentado</button>
+          </div>
+        </div>
+        <div>
+          <div class="tp-section-title">Densidad</div>
+          <div class="tp-seg" data-group="density">
+            <button data-val="comfortable">Cómodo</button>
+            <button data-val="compact">Compacto</button>
+          </div>
+        </div>
+        <div>
+          <div class="tp-section-title">Visualización</div>
+          <div class="tp-row"><label>Mostrar códigos</label>
+            <input type="checkbox" id="tp-codes" ${prefs.showCodes ? "checked" : ""}/></div>
+        </div>
+        <div>
+          <div class="tp-section-title">Acciones rápidas</div>
+          <button class="tp-btn" data-action="add-root">+ Agregar tipo de proceso</button>
+          <button class="tp-btn secondary" data-action="add-doc">+ Documento en primer subproceso</button>
+          <button class="tp-btn secondary" data-action="add-ins">+ Instructivo en primer doc</button>
+          <button class="tp-btn secondary" data-action="edit-first">Editar primer documento</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(el);
+    tweaksEl = el;
+
+    function refreshSel() {
+      el.querySelectorAll(".tp-seg").forEach((seg) => {
+        const group = seg.dataset.group;
+        seg.querySelectorAll("button").forEach((b) => {
+          b.classList.toggle("sel", b.dataset.val === prefs[group]);
+        });
+      });
+    }
+    refreshSel();
+
+    el.querySelectorAll(".tp-seg").forEach((seg) => {
+      seg.addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        prefs[seg.dataset.group] = b.dataset.val;
+        savePrefs(); applyPrefs(); refreshSel();
+      });
+    });
+
+    el.querySelector("#tp-codes").addEventListener("change", (e) => {
+      prefs.showCodes = e.target.checked;
+      savePrefs(); applyPrefs();
+    });
+
+    el.querySelector("[data-close]").addEventListener("click", () => {
+      hideTweaks();
+      window.parent.postMessage({ type: "__edit_mode_dismissed" }, "*");
+    });
+
+    el.querySelectorAll("[data-action]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const a = b.dataset.action;
+        if (a === "add-root") addRoot();
+        if (a === "add-doc") {
+          const sub = firstOfType("subproceso");
+          if (sub) addChild(sub, "documento");
+          else toast("No hay subprocesos", "error");
+        }
+        if (a === "add-ins") {
+          const doc = firstOfType("documento");
+          if (doc) addChild(doc, "instructivo");
+          else toast("No hay documentos", "error");
+        }
+        if (a === "edit-first") {
+          const doc = firstOfType("documento");
+          if (doc) openEditModal(doc.id);
+        }
+      });
+    });
+
+    // drag
+    const head = el.querySelector(".tp-head");
+    let dragOff = null;
+    head.addEventListener("mousedown", (e) => {
+      if (e.target.closest("[data-close]")) return;
+      const rect = el.getBoundingClientRect();
+      dragOff = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      document.addEventListener("mousemove", dragMove);
+      document.addEventListener("mouseup", dragEnd, { once: true });
+    });
+    function dragMove(e) {
+      if (!dragOff) return;
+      el.style.left = (e.clientX - dragOff.x) + "px";
+      el.style.top = (e.clientY - dragOff.y) + "px";
+      el.style.right = "auto";
+    }
+    function dragEnd() { dragOff = null; document.removeEventListener("mousemove", dragMove); }
+  }
+
+  function firstOfType(type) {
+    let found = null;
+    walk(state.roots, (n) => { if (!found && n.type === type) found = n; });
+    return found;
+  }
+
+  function hideTweaks() {
+    if (tweaksEl) tweaksEl.style.display = "none";
+  }
+
+  // ---------- Side Panel ----------
+  let sidePanelNodeId = null;
+
+  function isWebUrl(s) {
+    return /^https?:\/\//i.test(s || "");
+  }
+  function isOfficeUrl(s) {
+    return isWebUrl(s) && /\.(docx?|xlsx?|pptx?)(\?|$)/i.test(s);
+  }
+  function isPdfUrl(s) {
+    if (!s) return false;
+    if (s.startsWith("data:application/pdf")) return true;
+    return isWebUrl(s) && /\.pdf(\?|$)/i.test(s);
+  }
+  function gdriveFileId(s) {
+    if (!s) return null;
+    let m = s.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    m = s.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    return null;
+  }
+  function isGDrive(s) {
+    return /drive\.google\.com|docs\.google\.com/i.test(s || "");
+  }
+  function gdriveDownloadUrl(id) {
+    return "https://drive.google.com/uc?export=download&id=" + id;
+  }
+
+  function openSidePanel(nodeId) {
+    const found = findNode(nodeId);
+    if (!found) return;
+    sidePanelNodeId = nodeId;
+    const node = found.node;
+    document.querySelector(".app").classList.add("panel-open");
+    $("#sp-eyebrow").textContent = TYPE_LABEL[node.type] || "Documento";
+    $("#sp-title").textContent = node.name || "(sin nombre)";
+    $("#sp-code").textContent = node.code || "";
+    $("#sp-code").style.display = node.code ? "" : "none";
+
+    // Status pill
+    const meta = $("#sp-meta");
+    meta.innerHTML = "";
+    const pill = document.createElement("span");
+    pill.className = "status-pill";
+    pill.dataset.status = node.status || "OFICIAL";
+    pill.textContent = node.status || "OFICIAL";
+    meta.appendChild(pill);
+
+    const isEmbedded = (node.path || "").startsWith("data:");
+    const pathInput = $("#sp-path-input");
+    if (isEmbedded) {
+      pathInput.value = "— PDF cargado en este árbol —";
+      pathInput.disabled = true;
+      pathInput.style.background = "#F5F5F5";
+      pathInput.style.color = "#666";
+      pathInput.style.fontStyle = "italic";
+    } else {
+      pathInput.value = node.path || "";
+      pathInput.disabled = false;
+      pathInput.style.background = "";
+      pathInput.style.color = "";
+      pathInput.style.fontStyle = "";
+    }
+    renderSidePanelViewer(node);
+  }
+
+  function renderSidePanelViewer(node) {
+    const viewer = $("#sp-viewer");
+    const hint = $("#sp-hint");
+    viewer.innerHTML = "";
+    hint.style.display = "none";
+    hint.textContent = "";
+    const path = (node.path || "").trim();
+
+    if (!path) {
+      viewer.innerHTML = `<div class="sp-empty-viewer"><strong>Sin ruta configurada</strong><div>Agrega la ruta del archivo arriba y presiona Guardar.<br/>Ejemplo: C:\\Users\\usuario\\documento.docx</div></div>`;
+      return;
+    }
+
+    if (isGDrive(path)) {
+      const id = gdriveFileId(path);
+      if (id) {
+        viewer.innerHTML = `
+          <div class="sp-empty-viewer" style="padding:32px 24px">
+            <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#1A73E8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <strong style="font-size:14px;margin-top:6px">Documento en Google Drive</strong>
+            <div style="max-width:320px;line-height:1.5;margin-top:4px">Para preservar el formato original, descarga el archivo y ábrelo en Word de escritorio.</div>
+            <a href="${gdriveDownloadUrl(id)}" class="sp-btn primary" style="margin-top:14px;text-decoration:none" download>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Descargar Word
+            </a>
+            <div style="font-size:10.5px;color:#AAA;margin-top:12px;max-width:320px;line-height:1.5">El archivo en Drive debe tener acceso "Cualquier persona con el vínculo" para que la descarga funcione.</div>
+          </div>`;
+        return;
+      }
+    }
+
+    if (isPdfUrl(path)) {
+      const iframe = document.createElement("iframe");
+      if (path.startsWith("data:application/pdf")) {
+        try {
+          const blob = dataUrlToBlob(path);
+          iframe.src = URL.createObjectURL(blob);
+        } catch(e) {
+          iframe.src = path;
+        }
+      } else {
+        iframe.src = path;
+      }
+      viewer.appendChild(iframe);
+      return;
+    }
+
+    if (isOfficeUrl(path)) {
+      // Use Office Online viewer for Word/Excel/PPT URLs
+      const iframe = document.createElement("iframe");
+      iframe.src = "https://view.officeapps.live.com/op/embed.aspx?src=" + encodeURIComponent(path);
+      viewer.appendChild(iframe);
+      return;
+    }
+    if (isWebUrl(path)) {
+      const iframe = document.createElement("iframe");
+      iframe.src = path;
+      iframe.sandbox = "allow-scripts allow-same-origin allow-forms allow-popups";
+      viewer.appendChild(iframe);
+      return;
+    }
+
+    // Local or network path — browsers block this. Show instructions.
+    const mac = /macintosh|mac os x/i.test(navigator.userAgent);
+    const isWin = /^[A-Za-z]:\\/.test(path) || path.startsWith("\\\\");
+    let hintMsg = "";
+    if (isWin && mac) {
+      hintMsg = "Esta es una ruta de Windows (" + path.substring(0, 3) + "…). Desde Mac no se puede abrir directamente; pide acceso SMB al servidor o copia la ruta y ábrela desde una PC con acceso al disco compartido.";
+    } else if (isWin) {
+      hintMsg = "Los navegadores bloquean abrir archivos locales por seguridad. Haz click en <b>Copiar ruta</b>, pégala en el Explorador de Windows (Win+E) y presiona Enter para abrir el Word.";
+    } else {
+      hintMsg = "Los navegadores bloquean abrir archivos locales por seguridad. Copia la ruta y ábrela desde el Finder / Explorador.";
+    }
+    hint.innerHTML = hintMsg;
+    hint.style.display = "";
+
+    viewer.innerHTML = `
+      <div class="sp-empty-viewer">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#E8450A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        <strong>Documento en ruta local</strong>
+        <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;color:#1A1A1A;word-break:break-all;max-width:90%;background:#F5F5F5;padding:8px 10px;margin-top:4px">${escapeHtml(path)}</div>
+      </div>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function closeSidePanel() {
+    document.querySelector(".app").classList.remove("panel-open");
+    sidePanelNodeId = null;
+  }
+
+  function copyCurrentPath() {
+    if (!sidePanelNodeId) return;
+    const found = findNode(sidePanelNodeId);
+    if (!found || !found.node.path) { toast("No hay ruta configurada", "error"); return; }
+    const path = found.node.path;
+    navigator.clipboard.writeText(path).then(
+      () => toast("Ruta copiada al portapapeles", "success"),
+      () => {
+        // Fallback
+        const ta = document.createElement("textarea");
+        ta.value = path; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); toast("Ruta copiada", "success"); }
+        catch(e) { toast("No se pudo copiar", "error"); }
+        ta.remove();
+      }
+    );
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const [meta, b64] = dataUrl.split(",");
+    const mime = (meta.match(/:(.*?);/) || [,"application/octet-stream"])[1];
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  function downloadCurrentDocument() {
+    if (!sidePanelNodeId) return;
+    const found = findNode(sidePanelNodeId);
+    if (!found) return;
+    const node = found.node;
+    const path = (node.path || "").trim();
+    if (!path) { toast("Agrega una ruta primero", "error"); return; }
+    // Embedded PDF
+    if (path.startsWith("data:application/pdf")) {
+      try {
+        const blob = dataUrlToBlob(path);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = node.filename || ((node.code || node.name || "documento").replace(/[\\\/:*?"<>|]/g, "_") + ".pdf");
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        toast("Descargando PDF…", "success");
+      } catch(e) {
+        toast("No se pudo descargar: " + e.message, "error");
+      }
+      return;
+    }
+    if (isGDrive(path)) {
+      const id = gdriveFileId(path);
+      if (id) {
+        const a = document.createElement("a");
+        a.href = gdriveDownloadUrl(id);
+        a.rel = "noopener";
+        a.target = "_blank";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        toast("Descargando documento…", "success");
+        return;
+      }
+    }
+    if (isWebUrl(path)) {
+      // Force download attribute (works for same-origin or CORS-allowed URLs;
+      // for OneDrive/etc the browser falls back to opening in a tab)
+      const a = document.createElement("a");
+      a.href = path;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.download = node.filename || "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    }
+    toast("No se puede descargar una ruta local desde el navegador. Copia la ruta y ábrela en el Explorador.", "error");
+    copyCurrentPath();
+  }
+
+  function openCurrentDocument() {
+    if (!sidePanelNodeId) return;
+    const found = findNode(sidePanelNodeId);
+    if (!found) return;
+    const path = (found.node.path || "").trim();
+    if (!path) { toast("Agrega una ruta primero", "error"); return; }
+    // Embedded PDF (data URL)
+    if (path.startsWith("data:application/pdf")) {
+      try {
+        const blob = dataUrlToBlob(path);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        toast("Abriendo PDF…", "success");
+      } catch(e) {
+        toast("No se pudo abrir el PDF: " + e.message, "error");
+      }
+      return;
+    }
+    if (isGDrive(path)) {
+      const id = gdriveFileId(path);
+      if (id) {
+        // Trigger direct download
+        const a = document.createElement("a");
+        a.href = gdriveDownloadUrl(id);
+        a.download = "";
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        toast("Descargando documento…", "success");
+        return;
+      }
+    }
+    if (isWebUrl(path)) {
+      window.open(path, "_blank", "noopener");
+      return;
+    }
+    // Local path — try file:// (usually blocked); also copy to clipboard as fallback
+    try {
+      const fileUrl = path.startsWith("\\\\")
+        ? "file:" + path.replace(/\\/g, "/")
+        : (/^[A-Za-z]:\\/.test(path) ? "file:///" + path.replace(/\\/g, "/") : "file://" + path);
+      const w = window.open(fileUrl, "_blank");
+      if (!w) throw new Error("blocked");
+    } catch(e) {}
+    // Always copy so user has it ready to paste
+    copyCurrentPath();
+  }
+
+  function saveCurrentPath() {
+    if (!sidePanelNodeId) return;
+    const found = findNode(sidePanelNodeId);
+    if (!found) return;
+    const inp = $("#sp-path-input");
+    if (inp.disabled) return; // embedded PDF — ignore
+    found.node.path = inp.value.trim();
+    saveState();
+    render();
+    renderSidePanelViewer(found.node);
+    toast("Ruta guardada", "success");
+  }
+
+  $("#sp-close").addEventListener("click", closeSidePanel);
+  $("#sp-open").addEventListener("click", openCurrentDocument);
+  $("#sp-download").addEventListener("click", downloadCurrentDocument);
+  $("#sp-copy").addEventListener("click", copyCurrentPath);
+  $("#sp-path-save").addEventListener("click", saveCurrentPath);
+  $("#sp-path-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveCurrentPath();
+  });
+
+  // ---------- Init ----------
+  applyPrefs();
+  render();
+})();
+
+</script>
+</body>
+</html>
